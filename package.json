@@ -1,0 +1,26 @@
+{
+  "name": "stranger-chat-app",
+  "version": "1.0.0",
+  "description": "A real-time stranger chat app with random pairing and private rooms using Node.js and Socket.IO",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js"
+  },
+  "keywords": [
+    "chat",
+    "socket.io",
+    "nodejs",
+    "stranger-chat",
+    "realtime"
+  ],
+  "author": "Sanu Sharma",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
