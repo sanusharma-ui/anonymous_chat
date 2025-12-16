@@ -1,5 +1,5 @@
 const socket = io({ transports: ['websocket'], query: { room: new URLSearchParams(window.location.search).get('room') || '' } });
-let currentRoom = null;
+let currentRoom = new URLSearchParams(window.location.search).get('room') || null;
 let messageIdCounter = 0;
 let isTyping = false;
 let typingTimer;
@@ -102,17 +102,11 @@ function showTypingIndicator(show) {
         }
     }
 }
-<<<<<<< HEAD
-function scrollToBottom() {
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-=======
-
 function scrollToBottom(behavior = 'smooth') {
     messagesContainer.scrollTo({
         top: messagesContainer.scrollHeight,
         behavior: behavior
     });
->>>>>>> d9437479c9837985aabc540cd536aa143fdd184e
 }
 function handleTyping() {
     const typing = messageInput.value.trim().length > 0;
@@ -139,6 +133,10 @@ function createRoom() {
             roomLinkInput.value = data.link;
             roomModal.style.display = 'flex';
             currentRoom = new URLSearchParams(data.link.split('?')[1]).get('room');
+            // Auto-join the created room and wait for partner
+            socket.emit('joinRoom', currentRoom);
+            showScreen(waitingOverlay);
+            document.getElementById('waiting-text').textContent = 'Room created! Waiting for partner...';
         })
         .catch(() => showError('Failed to create room. Try again.'));
 }
@@ -190,10 +188,7 @@ function sendMessage() {
 // Socket Events
 socket.on('connect', () => {
     console.log('Connected to server');
-    if (currentRoom) {
-        socket.emit('joinRoom', currentRoom);
-        showScreen(waitingOverlay);
-    }
+    // Removed auto-join from here; handled in load or button clicks
 });
 socket.on('roomFull', (data) => {
     showWaiting(false);
@@ -216,13 +211,10 @@ socket.on('partnerLeft', () => {
     partnerStatus.textContent = 'Partner left';
     showWaiting(true, 'Partner disconnected. Finding new one...');
     showTypingIndicator(false); // Hide typing if partner left
-<<<<<<< HEAD
     if (!currentRoom) {
         socket.emit('joinRandom'); // Fixed: Re-join random queue for next partner
     }
-=======
     scrollToBottom();
->>>>>>> d9437479c9837985aabc540cd536aa143fdd184e
 });
 socket.on('message', (msg) => {
     addMessage({ ...msg, isSent: false });
@@ -256,14 +248,19 @@ messagesContainer.addEventListener('scroll', () => {
     // Infinite scroll or other features if needed, but keep simple
 });
 window.addEventListener('load', () => {
-    if (currentRoom) joinRoom(); // Auto-join if URL has room
-    else showScreen(landing);
+    if (currentRoom) {
+        // Auto-join if URL has room param
+        socket.emit('joinRoom', currentRoom);
+        showScreen(waitingOverlay);
+        document.getElementById('waiting-text').textContent = 'Joining room...';
+    } else {
+        showScreen(landing);
+    }
 });
 // Handle resize for responsiveness
 window.addEventListener('resize', () => {
     scrollToBottom('auto');
 });
-
 // Keyboard handling for mobile
 messageInput.addEventListener('focus', () => {
     setTimeout(scrollToBottom, 300);
