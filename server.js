@@ -1,0 +1,241 @@
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const { randomUUID } = require("crypto");
+require('dotenv').config();  
+const ngrok = require("@ngrok/ngrok"); // Optional: For tunneling
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  pingTimeout: 20000,
+  maxHttpBufferSize: 1e7, // Added for memory safety
+  cors: { origin: "*" },
+});
+
+// Bad words lists for safety filter
+const englishBadWords = [
+  'fuck', 'shit', 'ass', 'asshole', 'bitch', 'bastard', 'cock', 'pussy', 'cunt', 'dick',
+  'bollocks', 'bugger', 'wanker', 'twat', 'prick', 'slut', 'whore', 'choad', 'shag'
+  // Add more if needed, e.g., 'damn', 'hell' for mild ones
+];
+
+const hindiBadWords = [
+  'madarchod', 'maderchod', 'behenchod', 'bhenchod', 'bahenchod', 'chutiya', 'chutiye',
+  'bhosdi', 'bhosda', 'bhonsda', 'randi', 'rand', 'gandu', 'gand', 'lund', 'loda', 'lauda',
+  'chut', 'choot', 'laund', 'harami', 'haramjada', 'bakchod', 'bhadwa', 'bhadva',
+  'kutiya', 'kutta', 'suar', 'ullu', 'bc', 'mc', 'bsdk', 'pkmkb', 'teri maa ki chut'
+  // Compiled from common lists; add variations like 'madarchoot' if needed
+];
+
+function hasBadWords(content) {
+  const lowerMsg = content.toLowerCase().trim();
+  return englishBadWords.some(word => lowerMsg.includes(word)) ||
+         hindiBadWords.some(word => lowerMsg.includes(word));
+}
+
+app.use(express.static("public"));
+
+const waitingQueue = new Set();
+const roomUserCounts = new Map(); // Additional tracking for room sizes to handle concurrency better
+
+app.get("/create-room", (req, res) => {
+  const roomId = randomUUID();
+  res.json({ link: `${req.protocol}://${req.get("host")}/?room=${roomId}` });
+});
+
+io.on("connection", (socket) => {
+  console.log(`✅ User connected: ${socket.id}`);
+  const roomId = socket.handshake.query.room;
+
+  if (roomId && typeof roomId === "string") {
+    // Private room logic: Prevent more than 2 users
+    const currentCount = roomUserCounts.get(roomId) || 0;
+    if (currentCount >= 2) {
+      socket.emit("roomFull", { message: "Room is already full with 2 users." });
+      socket.disconnect(true);
+      return;
+    }
+
+    // Join the room and update count
+    socket.join(roomId);
+    roomUserCounts.set(roomId, currentCount + 1);
+    console.log(`🏠 User joined private room: ${roomId} (Total: ${currentCount + 1})`);
+
+    // Check after join
+    const clients = io.sockets.adapter.rooms.get(roomId);
+    if (clients && clients.size === 2) {
+      io.to(roomId).emit("paired");
+    } else {
+      socket.emit("waiting");
+    }
+
+    // Message handling with safety filter
+    socket.on("message", (msg) => {
+      if (msg.id && typeof msg.content === "string" && msg.content.trim()) {
+        if (hasBadWords(msg.content)) {
+          socket.emit("messageBlocked", { 
+            id: msg.id, 
+            reason: "Bhai, gaali mat de, clean chat karte hain! 😊" 
+          });
+          return;
+        }
+        // Emit delivered back to sender
+        socket.emit("delivered", msg.id);
+        // Emit to partner/room with ID
+        socket.to(roomId).emit("message", { id: msg.id, content: msg.content });
+      }
+    });
+
+    // Typing indicator
+    socket.on("typing", (isTyping) => {
+      if (typeof isTyping === "boolean") {
+        socket.to(roomId).emit("typing", isTyping);
+      }
+    });
+
+    // Seen handler
+    socket.on("seen", (data) => {
+      if (data.messageId) {
+        socket.to(roomId).emit("seen", data.messageId);
+      }
+    });
+
+    // Handle disconnecting (before actual disconnect)
+    socket.on("disconnecting", () => {
+      socket.to(roomId).emit("partnerLeft");
+      // Update count on disconnect
+      const updatedCount = (roomUserCounts.get(roomId) || 0) - 1;
+      roomUserCounts.set(roomId, updatedCount);
+      if (updatedCount === 0) {
+        roomUserCounts.delete(roomId); // Cleanup empty rooms
+      }
+      console.log(`🏠 User leaving private room: ${roomId} (Remaining: ${updatedCount})`);
+    });
+
+    // Optional: Handle post-disconnect cleanup if needed
+    socket.on("disconnect", () => {
+      console.log(`❌ User disconnected from private room: ${roomId}`);
+      // Emit waiting to remaining user if exactly one left
+      const remainingClients = io.sockets.adapter.rooms.get(roomId);
+      if (remainingClients && remainingClients.size === 1) {
+        io.to(roomId).emit("waiting");
+      }
+      // Cleanup count
+      const updatedCount = (roomUserCounts.get(roomId) || 0) - 1;
+      roomUserCounts.set(roomId, updatedCount);
+      if (updatedCount <= 0) roomUserCounts.delete(roomId);
+    });
+
+  } else {
+    // Public pairing logic
+    pairUser(socket);
+
+    // Message handling with safety filter
+    socket.on("message", (msg) => {
+      if (msg.id && typeof msg.content === "string" && msg.content.trim() && socket.partner && socket.partner.connected) {
+        if (hasBadWords(msg.content)) {
+          socket.emit("messageBlocked", { 
+            id: msg.id, 
+            reason: "Bhai, gaali mat de, clean chat karte hain! 😊" 
+          });
+          return;
+        }
+        // Emit delivered back to sender
+        socket.emit("delivered", msg.id);
+        // Emit to partner with ID
+        socket.partner.emit("message", { id: msg.id, content: msg.content });
+      }
+    });
+
+    // Next partner request
+    socket.on("next", () => {
+      console.log(`🔁 ${socket.id} requested next`);
+      unpair(socket);
+      pairUser(socket);
+    });
+
+    // Typing indicator
+    socket.on("typing", (isTyping) => {
+      if (typeof isTyping === "boolean" && socket.partner && socket.partner.connected) {
+        socket.partner.emit("typing", isTyping);
+      }
+    });
+
+    // Seen handler
+    socket.on("seen", (data) => {
+      if (data.messageId && socket.partner && socket.partner.connected) {
+        socket.partner.emit("seen", data.messageId);
+      }
+    });
+
+    // Handle disconnect
+    socket.on("disconnect", () => {
+      console.log(`❌ ${socket.id} disconnected`);
+      unpair(socket);
+    });
+  }
+});
+
+function pairUser(socket) {
+  // Find a partner from queue (check connected and not self)
+  for (let partner of waitingQueue) {
+    if (partner.connected && partner !== socket && !partner.partner) {
+      waitingQueue.delete(partner);
+      socket.partner = partner;
+      partner.partner = socket;
+
+      console.log(`🔗 Paired ${socket.id} with ${partner.id}`);
+      socket.emit("paired");
+      if (partner.connected) {
+        partner.emit("paired");
+      }
+      return;
+    }
+  }
+  // No partner found, add to queue
+  waitingQueue.add(socket);
+  socket.emit("waiting");
+}
+
+function unpair(socket) {
+  if (socket.partner) {
+    const partner = socket.partner;
+    if (partner.connected) {
+      partner.emit("partnerLeft");
+      partner.partner = null;
+      waitingQueue.add(partner); // Add back to queue
+    }
+    socket.partner = null;
+  }
+  waitingQueue.delete(socket);
+}
+
+// Ngrok Integration (Easy to Remove: Just comment out or unset ENABLE_NGROK)
+async function startNgrok() {
+  if (process.env.ENABLE_NGROK !== 'true') {
+    console.log('🌐 Ngrok disabled. Set ENABLE_NGROK=true to enable.');
+    return;
+  }
+
+  try {
+    const listener = await ngrok.forward({
+      addr: process.env.PORT || 3000,
+      authtoken: process.env.NGROK_AUTHTOKEN,  // Direct env se le, from_env ki jagah
+    });
+
+    const url = listener.url();  // Yeh sync hai latest mein, await optional
+    console.log(`🌐 Ngrok tunnel started: ${url}`);
+    console.log(`🔗 Public URL: ${url}/ (Share this for testing)`);
+  } catch (error) {
+    console.error('❌ Ngrok failed to start:', error.message || error);
+    console.log('💡 Double-check NGROK_AUTHTOKEN – copy fresh from dashboard, no spaces!');
+  }
+}
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, async () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  await startNgrok(); // Start ngrok after server listen
+});

@@ -1,450 +1,81 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShadowChat - Anonymous Messaging</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    #chat::-webkit-scrollbar {
-      width: 8px;
-    }
-    #chat::-webkit-scrollbar-track {
-      background: #1F2937;
-      border-radius: 4px;
-    }
-    #chat::-webkit-scrollbar-thumb {
-      background: #4B5563;
-      border-radius: 4px;
-    }
-    #chat::-webkit-scrollbar-thumb:hover {
-      background: #6B7280;
-    }
-  </style>
-</head>
-<body class="bg-gray-900 text-gray-100 font-inter min-h-screen flex flex-col">
-  <header class="w-full max-w-3xl mx-auto pt-8 pb-4 px-4">
-    <h1 class="text-3xl sm:text-4xl font-bold text-center text-teal-400 animate-pulse">
-      💬 ShadowChat
-    </h1>
-  </header>
-
-  <main class="flex-1 w-full max-w-3xl mx-auto px-4 flex flex-col gap-4">
-    <div id="chat" class="flex-1 bg-gray-800 rounded-xl p-4 overflow-y-auto flex flex-col gap-3 shadow-lg max-h-[calc(100vh-250px)]"></div>
-    
-    <div id="typing" class="hidden items-center gap-2 text-sm text-gray-400 italic">
-      Stranger is typing
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce"></div>
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-100"></div>
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-200"></div>
-    </div>
-
-    <div id="loader" class="hidden text-center text-sm text-gray-400">
-      Finding new partner
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse"></span>
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse delay-100"></span>
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse delay-200"></span>
-    </div>
-
-    <div id="controls" class="flex flex-col sm:flex-row gap-3">
-      <input
-        id="input"
-        placeholder="Type a message..."
-        class="flex-1 p-3 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-colors"
-      >
-      <div class="flex gap-3">
-        <button onclick="send()" class="px-4 py-3 rounded-lg bg-teal-400 text-gray-900 font-medium hover:bg-teal-300 transition-all">Send</button>
-        <button onclick="next()" class="px-4 py-3 rounded-lg bg-gray-600 text-gray-100 font-medium hover:bg-gray-500 transition-all">Next</button>
-        <button onclick="createPrivate()" class="px-4 py-3 rounded-lg bg-blue-500 text-gray-100 font-medium hover:bg-blue-400 transition-all">Create Private Chat</button>
-      </div>
-    </div>
-
-    <div id="shareBox" class="hidden bg-gray-800 rounded-xl p-4 shadow-lg text-center">
-      <p class="text-sm text-gray-300 mb-2">📢 Share this link with your friend:</p>
-      <p id="linkDisplay" class="text-teal-400 break-all mb-3"></p>
-      <a id="whatsappShare" target="_blank">
-        <button class="px-4 py-2 rounded-lg bg-green-500 text-gray-900 font-medium hover:bg-green-400 transition-all">📲 Share on WhatsApp</button>
-      </a>
-      <div class="mt-4">
-        <p class="text-sm text-gray-300 mb-2">📷 Or scan this QR Code:</p>
-        <img id="qrCode" alt="QR Code" class="mx-auto rounded-lg shadow-md">
-      </div>
-    </div>
-  </main>
-
-  <footer class="mt-auto py-6 text-center text-sm text-gray-400">
-    Made with ❤️ by <b>Sanu Sharma</b><br>
-    📧 <a href="mailto:the.drayen@gmail.com" class="text-teal-400 hover:underline">the.drayen@gmail.com</a> |
-    📸 <a href="https://instagram.com/sanusharma0045.v" target="_blank" class="text-teal-400 hover:underline">@sanusharma0045.v</a><br>
-    © 2025 ShadowChat. All rights reserved.
-  </footer>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomId = urlParams.get("room");
-
-    const socket = io("/", { query: { room: roomId } });
-    const chat = document.getElementById("chat");
-    const input = document.getElementById("input");
-    const typingDiv = document.getElementById("typing");
-    const shareBox = document.getElementById("shareBox");
-    const linkDisplay = document.getElementById("linkDisplay");
-    const whatsappShare = document.getElementById("whatsappShare");
-    const qrCode = document.getElementById("qrCode");
-    const loader = document.getElementById("loader");
-    let typingTimeout;
-    let messageId = 0;
-
-    function getTicks(status) {
-      if (status === 'sent') {
-        return '✓';
-      } else if (status === 'delivered') {
-        return '✓✓';
-      } else if (status === 'seen') {
-        return '<span class="text-blue-400">✓✓</span>';
-      }
-      return '';
-    }
-
-    function append(msg, type = "system", status = null) {
-      const bubble = document.createElement("div");
-      bubble.className = `p-3 rounded-xl max-w-[75%] text-sm animate-fade-in-up flex items-end gap-1 ${
-        type === "you" ? "bg-teal-400 text-gray-900 ml-auto" :
-        type === "stranger" ? "bg-gray-700 text-gray-100" :
-        "text-gray-400 text-center text-xs w-full"
-      }`;
-      bubble.innerHTML = `<span>${msg}</span>${type === "you" && status ? `<span class="text-xs">${getTicks(status)}</span>` : ''}`;
-      if (type === "you") bubble.dataset.messageId = messageId++;
-      chat.appendChild(bubble);
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    function updateMessageStatus(messageId, status) {
-      const bubbles = chat.getElementsByClassName('animate-fade-in-up');
-      for (const bubble of bubbles) {
-        if (bubble.dataset.messageId === messageId.toString()) {
-          const tickSpan = bubble.querySelector('span:last-child');
-          if (tickSpan) tickSpan.innerHTML = getTicks(status);
-          break;
-        }
-      }
-    }
-
-    function send() {
-      const msg = input.value.trim();
-      if (msg) {
-        const currentMessageId = messageId;
-        append("You: " + msg, "you", "sent");
-        socket.emit("message", { text: msg, id: currentMessageId });
-        socket.emit("typing", false);
-        input.value = "";
-      }
-    }
-
-    function next() {
-      append("🔁 You left the chat.", "system");
-      loader.style.display = "block";
-      socket.emit("next");
-    }
-
-    function createPrivate() {
-      fetch("/create-room")
-        .then(res => res.json())
-        .then(data => {
-          navigator.clipboard.writeText(data.link);
-          append("🔗 Private chat link copied to clipboard!", "system");
-          shareBox.style.display = "block";
-          linkDisplay.textContent = data.link;
-          whatsappShare.href = `https://wa.me/?text=${encodeURIComponent("Join me on ShadowChat: " + data.link)}`;
-          qrCode.src = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(data.link)}`;
-        })
-        .catch(() => append("❌ Failed to create private room.", "system"));
-    }
-
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        send();
-      } else {
-        socket.emit("typing", true);
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => socket.emit("typing", false), 1000);
-      }
-    });
-
-    socket.on("message", ({ text, id }) => {
-      append("Stranger: " + text, "stranger");
-      socket.emit("messageDelivered", id);
-      typingDiv.style.display = "none";
-    });
-
-    socket.on("messageDelivered", (messageId) => {
-      updateMessageStatus(messageId, "delivered");
-    });
-
-    socket.on("messageSeen", (messageId) => {
-      updateMessageStatus(messageId, "seen");
-    });
-
-    socket.on("paired", () => {
-      append("✅ You are now connected.", "system");
-      loader.style.display = "none";
-      socket.emit("checkMessages");
-    });
-
-    socket.on("waiting", () => {
-      append("⏳ Waiting for a partner...", "system");
-    });
-
-    socket.on("partnerLeft", () => append("❌ Stranger left the chat.", "system"));
-
-    socket.on("typing", (isTyping) => {
-      typingDiv.style.display = isTyping ? "flex" : "none";
-    });
-
-    socket.on("checkMessages", () => {
-      const bubbles = chat.getElementsByClassName('animate-fade-in-up');
-      for (const bubble of bubbles) {
-        if (bubble.dataset.messageId) {
-          socket.emit("messageSeen", bubble.dataset.messageId);
-        }
-      }
-    });
-
-    window.onload = () => input.focus();
-  </script>
-</body>
-</html> -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShadowChat - Anonymous Messaging</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    #chat::-webkit-scrollbar {
-      width: 8px;
-    }
-    #chat::-webkit-scrollbar-track {
-      background: #1F2937;
-      border-radius: 4px;
-    }
-    #chat::-webkit-scrollbar-thumb {
-      background: #4B5563;
-      border-radius: 4px;
-    }
-    #chat::-webkit-scrollbar-thumb:hover {
-      background: #6B7280;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShadowChat - Modern Anonymous Chat</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="bg-gray-900 text-gray-100 font-inter min-h-screen flex flex-col">
-  <header class="w-full max-w-3xl mx-auto pt-8 pb-4 px-4">
-    <h1 class="text-3xl sm:text-4xl font-bold text-center text-teal-400 animate-pulse">
-      💬 ShadowChat
-    </h1>
-  </header>
-
-  <main class="flex-1 w-full max-w-3xl mx-auto px-4 flex flex-col gap-4">
-    <div id="chat" class="flex-1 bg-gray-800 rounded-xl p-4 overflow-y-auto flex flex-col gap-3 shadow-lg max-h-[calc(100vh-250px)]"></div>
-    
-    <div id="typing" class="hidden items-center gap-2 text-sm text-gray-400 italic">
-      Stranger is typing
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce"></div>
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-100"></div>
-      <div class="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-200"></div>
+<body>
+    <!-- Landing Screen -->
+    <div id="landing" class="screen active">
+        <div class="logo">
+            <h1>ShadowChat</h1>
+            <p>Anonymous chats, powered by. Clean, fun, and safe.</p>
+        </div>
+        <div class="options">
+            <button id="random-chat" class="btn-primary">Random Chat</button>
+            <button id="create-room" class="btn-secondary">Create Private Room</button>
+            <div class="or-divider">or</div>
+            <div class="input-group">
+                <input type="text" id="join-room" placeholder="Enter Room ID to Join" maxlength="36">
+                <button id="join-btn" class="btn-primary">Join</button>
+            </div>
+        </div>
     </div>
 
-    <div id="loader" class="hidden text-center text-sm text-gray-400">
-      Finding new partner
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse"></span>
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse delay-100"></span>
-      <span class="inline-block w-2 h-2 bg-teal-400 rounded-full animate-pulse delay-200"></span>
+    <!-- Chat Screen -->
+    <div id="chat" class="screen">
+        <header class="chat-header">
+            <div class="status">
+                <span id="partner-status">Connecting...</span>
+                <div id="typing-indicator" class="typing-dots" style="display: none;">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <button id="back-btn" class="back-icon">←</button>
+            <button id="next-btn" class="next-icon" style="display: none;">↻</button>
+        </header>
+        <div id="messages" class="messages-container"></div>
+        <div class="message-input-container">
+            <div class="input-wrapper">
+                <input type="text" id="message-input" placeholder="Type a message..." maxlength="500">
+                <button id="send-btn" class="send-btn">→</button>
+            </div>
+            <div id="message-status" class="status-text"></div>
+        </div>
     </div>
 
-    <div id="controls" class="flex flex-col sm:flex-row gap-3">
-      <input
-        id="input"
-        placeholder="Type a message..."
-        class="flex-1 p-3 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-400 transition-colors"
-      >
-      <div class="flex gap-3">
-        <button onclick="send()" class="px-4 py-3 rounded-lg bg-teal-400 text-gray-900 font-medium hover:bg-teal-300 transition-all">Send</button>
-        <button onclick="next()" class="px-4 py-3 rounded-lg bg-gray-600 text-gray-100 font-medium hover:bg-gray-500 transition-all">Next</button>
-        <button onclick="createPrivate()" class="px-4 py-3 rounded-lg bg-blue-500 text-gray-100 font-medium hover:bg-blue-400 transition-all">Create Private Chat</button>
-      </div>
+    <!-- Waiting Screen Overlay -->
+    <div id="waiting-overlay" class="overlay active">
+        <div class="waiting-content">
+            <div class="spinner"></div>
+            <p id="waiting-text">Finding a chat partner...</p>
+        </div>
     </div>
 
-    <div id="shareBox" class="hidden bg-gray-800 rounded-xl p-4 shadow-lg text-center">
-      <p class="text-sm text-gray-300 mb-2">📢 Share this link with your friend:</p>
-      <p id="linkDisplay" class="text-teal-400 break-all mb-3"></p>
-      <a id="whatsappShare" target="_blank">
-        <button class="px-4 py-2 rounded-lg bg-green-500 text-gray-900 font-medium hover:bg-green-400 transition-all">📲 Share on WhatsApp</button>
-      </a>
-      <div class="mt-4">
-        <p class="text-sm text-gray-300 mb-2">📷 Or scan this QR Code:</p>
-        <img id="qrCode" alt="QR Code" class="mx-auto rounded-lg shadow-md">
-      </div>
+    <!-- Room Created Modal -->
+    <div id="room-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Room Created!</h2>
+            <p>Share this link with your friend:</p>
+            <input type="text" id="room-link" readonly>
+            <button id="copy-link" class="btn-primary">Copy Link</button>
+            <button id="close-modal" class="btn-secondary">Close</button>
+        </div>
     </div>
-  </main>
 
-  <footer class="mt-auto py-6 text-center text-sm text-gray-400">
-    Made with ❤️ by <b>Sanu Sharma</b><br>
-    📧 <a href="mailto:the.drayen@gmail.com" class="text-teal-400 hover:underline">the.drayen@gmail.com</a> |
-    📸 <a href="https://instagram.com/sanusharma0045.v" target="_blank" class="text-teal-400 hover:underline">@sanusharma0045.v</a><br>
-    © 2025 ShadowChat. All rights reserved.
-  </footer>
+    <!-- Error Modal -->
+    <div id="error-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Oops!</h2>
+            <p id="error-text"></p>
+            <button id="ok-btn" class="btn-primary">OK</button>
+        </div>
+    </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomId = urlParams.get("room");
-    const share = urlParams.get("share");
-
-    const socket = io("/", { query: { room: roomId } });
-    const chat = document.getElementById("chat");
-    const input = document.getElementById("input");
-    const typingDiv = document.getElementById("typing");
-    const shareBox = document.getElementById("shareBox");
-    const linkDisplay = document.getElementById("linkDisplay");
-    const whatsappShare = document.getElementById("whatsappShare");
-    const qrCode = document.getElementById("qrCode");
-    const loader = document.getElementById("loader");
-    let typingTimeout;
-    let messageId = 0;
-
-    function getTicks(status) {
-      if (status === 'sent') {
-        return '✓';
-      } else if (status === 'delivered') {
-        return '✓✓';
-      } else if (status === 'seen') {
-        return '<span class="text-blue-400">✓✓</span>';
-      }
-      return '';
-    }
-
-    function append(msg, type = "system", status = null) {
-      const bubble = document.createElement("div");
-      bubble.className = `p-3 rounded-xl max-w-[75%] text-sm animate-fade-in-up flex items-end gap-1 ${
-        type === "you" ? "bg-teal-400 text-gray-900 ml-auto" :
-        type === "stranger" ? "bg-gray-700 text-gray-100" :
-        "text-gray-400 text-center text-xs w-full"
-      }`;
-      bubble.innerHTML = `<span>${msg}</span>${type === "you" && status ? `<span class="text-xs">${getTicks(status)}</span>` : ''}`;
-      if (type === "you") bubble.dataset.messageId = messageId++;
-      chat.appendChild(bubble);
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    function updateMessageStatus(messageId, status) {
-      const bubbles = chat.getElementsByClassName('animate-fade-in-up');
-      for (const bubble of bubbles) {
-        if (bubble.dataset.messageId === messageId.toString()) {
-          const tickSpan = bubble.querySelector('span:last-child');
-          if (tickSpan) tickSpan.innerHTML = getTicks(status);
-          break;
-        }
-      }
-    }
-
-    function send() {
-      const msg = input.value.trim();
-      if (msg) {
-        const currentMessageId = messageId;
-        append("You: " + msg, "you", "sent");
-        socket.emit("message", { text: msg, id: currentMessageId });
-        socket.emit("typing", false);
-        input.value = "";
-      }
-    }
-
-    function next() {
-      append("🔁 You left the chat.", "system");
-      loader.style.display = "block";
-      socket.emit("next");
-    }
-
-    function createPrivate() {
-      fetch("/create-room")
-        .then(res => res.json())
-        .then(data => {
-          navigator.clipboard.writeText(data.link);
-          append("🔗 Private chat link copied to clipboard!", "system");
-          const url = new URL(data.link);
-          url.searchParams.append('share', '1');
-          window.location.href = url.toString();
-        })
-        .catch(() => append("❌ Failed to create private room.", "system"));
-    }
-
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        send();
-      } else {
-        socket.emit("typing", true);
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => socket.emit("typing", false), 1000);
-      }
-    });
-
-    socket.on("message", ({ text, id }) => {
-      append("Stranger: " + text, "stranger");
-      socket.emit("messageDelivered", id);
-      typingDiv.style.display = "none";
-    });
-
-    socket.on("messageDelivered", (messageId) => {
-      updateMessageStatus(messageId, "delivered");
-    });
-
-    socket.on("messageSeen", (messageId) => {
-      updateMessageStatus(messageId, "seen");
-    });
-
-    socket.on("paired", () => {
-      append("✅ You are now connected.", "system");
-      loader.style.display = "none";
-      socket.emit("checkMessages");
-    });
-
-    socket.on("waiting", () => {
-      append("⏳ Waiting for a partner...", "system");
-    });
-
-    socket.on("partnerLeft", () => append("❌ Stranger left the chat.", "system"));
-
-    socket.on("typing", (isTyping) => {
-      typingDiv.style.display = isTyping ? "flex" : "none";
-    });
-
-    socket.on("checkMessages", () => {
-      const bubbles = chat.getElementsByClassName('animate-fade-in-up');
-      for (const bubble of bubbles) {
-        if (bubble.dataset.messageId) {
-          socket.emit("messageSeen", bubble.dataset.messageId);
-        }
-      }
-    });
-
-    window.onload = () => {
-      input.focus();
-      if (share === '1') {
-        const cleanUrl = window.location.href.replace(/&share=1|\?share=1/, '');
-        shareBox.style.display = "block";
-        linkDisplay.textContent = cleanUrl;
-        whatsappShare.href = `https://wa.me/?text=${encodeURIComponent("Join me on ShadowChat: " + cleanUrl)}`;
-        qrCode.src = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(cleanUrl)}`;
-        append("🔗 You have created and joined the private chat. Share the link with your friend!", "system");
-      }
-      if (roomId) {
-        loader.style.display = "block";
-      }
-    };
-  </script>
+    <script src="script.js"></script>
 </body>
 </html>
