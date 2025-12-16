@@ -113,8 +113,11 @@ function showTypingIndicator(show) {
     }
 }
 
-function scrollToBottom() {
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+function scrollToBottom(behavior = 'smooth') {
+    messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: behavior
+    });
 }
 
 function handleTyping() {
@@ -213,12 +216,14 @@ socket.on('waiting', () => {
     showScreen(chat);
     showWaiting(true, 'Waiting for partner...');
     partnerStatus.textContent = 'Waiting for partner...';
+    scrollToBottom();
 });
 
 socket.on('paired', () => {
     showWaiting(false);
     showScreen(chat);
     partnerStatus.textContent = currentRoom ? 'Private Chat' : 'Random Chat';
+    scrollToBottom();
 });
 
 socket.on('partnerLeft', () => {
@@ -226,6 +231,7 @@ socket.on('partnerLeft', () => {
     showWaiting(true, 'Partner disconnected. Finding new one...');
     nextBtn.style.display = currentRoom ? 'none' : 'block';
     showTypingIndicator(false); // Hide typing if partner left
+    scrollToBottom();
 });
 
 socket.on('message', (msg) => {
@@ -273,5 +279,10 @@ window.addEventListener('load', () => {
 
 // Handle resize for responsiveness
 window.addEventListener('resize', () => {
-    scrollToBottom();
+    scrollToBottom('auto');
+});
+
+// Keyboard handling for mobile
+messageInput.addEventListener('focus', () => {
+    setTimeout(scrollToBottom, 300);
 });
