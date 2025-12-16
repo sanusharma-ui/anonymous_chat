@@ -102,8 +102,17 @@ function showTypingIndicator(show) {
         }
     }
 }
+<<<<<<< HEAD
 function scrollToBottom() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+=======
+
+function scrollToBottom(behavior = 'smooth') {
+    messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: behavior
+    });
+>>>>>>> d9437479c9837985aabc540cd536aa143fdd184e
 }
 function handleTyping() {
     const typing = messageInput.value.trim().length > 0;
@@ -195,19 +204,25 @@ socket.on('waiting', () => {
     showScreen(chat);
     showWaiting(true, 'Waiting for partner...');
     partnerStatus.textContent = 'Waiting for partner...';
+    scrollToBottom();
 });
 socket.on('paired', () => {
     showWaiting(false);
     showScreen(chat);
     partnerStatus.textContent = currentRoom ? 'Private Chat' : 'Random Chat';
+    scrollToBottom();
 });
 socket.on('partnerLeft', () => {
     partnerStatus.textContent = 'Partner left';
     showWaiting(true, 'Partner disconnected. Finding new one...');
     showTypingIndicator(false); // Hide typing if partner left
+<<<<<<< HEAD
     if (!currentRoom) {
         socket.emit('joinRandom'); // Fixed: Re-join random queue for next partner
     }
+=======
+    scrollToBottom();
+>>>>>>> d9437479c9837985aabc540cd536aa143fdd184e
 });
 socket.on('message', (msg) => {
     addMessage({ ...msg, isSent: false });
@@ -246,5 +261,10 @@ window.addEventListener('load', () => {
 });
 // Handle resize for responsiveness
 window.addEventListener('resize', () => {
-    scrollToBottom();
+    scrollToBottom('auto');
+});
+
+// Keyboard handling for mobile
+messageInput.addEventListener('focus', () => {
+    setTimeout(scrollToBottom, 300);
 });
