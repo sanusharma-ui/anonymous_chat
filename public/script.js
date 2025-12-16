@@ -69,7 +69,7 @@ function addMessage({ id, content, isSent, timestamp = Date.now(), status = 'sen
         ${isSent ? `<span class="message-status ${status}">${status === 'seen' ? '✓✓' : status === 'delivered' ? '✓' : ''}</span>` : ''}
     `;
     messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    scrollToBottom();
     return { id, element: messageDiv };
 }
 
@@ -104,13 +104,17 @@ function showTypingIndicator(show) {
             </div>
         `;
         messagesContainer.appendChild(typingMessageElement);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        scrollToBottom();
     } else {
         if (typingMessageElement) {
             typingMessageElement.remove();
             typingMessageElement = null;
         }
     }
+}
+
+function scrollToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 function handleTyping() {
@@ -269,5 +273,5 @@ window.addEventListener('load', () => {
 
 // Handle resize for responsiveness
 window.addEventListener('resize', () => {
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    scrollToBottom();
 });
