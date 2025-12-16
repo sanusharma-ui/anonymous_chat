@@ -4,7 +4,6 @@ let messageIdCounter = 0;
 let isTyping = false;
 let typingTimer;
 let typingMessageElement = null;
-
 // DOM Elements
 const landing = document.getElementById('landing');
 const chat = document.getElementById('chat');
@@ -23,7 +22,6 @@ const closeModalBtn = document.getElementById('close-modal');
 const errorModal = document.getElementById('error-modal');
 const errorText = document.getElementById('error-text');
 const okBtn = document.getElementById('ok-btn');
-
 // Event Listeners
 document.getElementById('random-chat').addEventListener('click', () => enterRandomChat());
 document.getElementById('create-room').addEventListener('click', createRoom);
@@ -38,31 +36,27 @@ messageInput.addEventListener('keydown', () => clearTimeout(typingTimer));
 copyLinkBtn.addEventListener('click', copyRoomLink);
 closeModalBtn.addEventListener('click', () => { roomModal.style.display = 'none'; });
 okBtn.addEventListener('click', () => { errorModal.style.display = 'none'; });
-
 // Utility Functions
 function showScreen(screen) {
     [...document.querySelectorAll('.screen, .overlay')].forEach(el => el.classList.remove('active'));
     if (screen) screen.classList.add('active');
     if (screen === chat) nextBtn.style.display = currentRoom ? 'none' : 'block'; // Hide next for private rooms
 }
-
 function showWaiting(show = true, text = 'Finding a chat partner...') {
     waitingOverlay.classList.toggle('active', show);
     if (text) document.getElementById('waiting-text').textContent = text;
 }
-
 function showError(message) {
     errorText.textContent = message;
     errorModal.style.display = 'flex';
 }
-
 function formatTime(date) {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
 function addMessage({ id, content, isSent, timestamp = Date.now(), status = 'sent' }) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+    messageDiv.dataset.id = id; // Fixed: Add data-id attribute for status updates
     messageDiv.innerHTML = `
         <div class="message-bubble">${escapeHtml(content)}</div>
         <span class="message-time">${formatTime(timestamp)}</span>
@@ -72,13 +66,11 @@ function addMessage({ id, content, isSent, timestamp = Date.now(), status = 'sen
     scrollToBottom();
     return { id, element: messageDiv };
 }
-
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
-
 function updateMessageStatus(id, status) {
     const message = messagesContainer.querySelector(`[data-id="${id}"]`);
     if (message) {
@@ -89,11 +81,9 @@ function updateMessageStatus(id, status) {
         }
     }
 }
-
 function showTypingIndicator(show) {
     if (show) {
         if (typingMessageElement) return; // Already showing
-
         typingMessageElement = document.createElement('div');
         typingMessageElement.className = 'message received typing-message';
         typingMessageElement.innerHTML = `
@@ -112,11 +102,9 @@ function showTypingIndicator(show) {
         }
     }
 }
-
 function scrollToBottom() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
-
 function handleTyping() {
     const typing = messageInput.value.trim().length > 0;
     if (typing !== isTyping) {
@@ -129,14 +117,12 @@ function handleTyping() {
         socket.emit('typing', false);
     }, 1000);
 }
-
 // Chat Functions
 function enterRandomChat() {
     currentRoom = null;
     showScreen(waitingOverlay);
     socket.emit('joinRandom'); // Trigger connection in public mode
 }
-
 function createRoom() {
     fetch('/create-room')
         .then(res => res.json())
@@ -147,7 +133,6 @@ function createRoom() {
         })
         .catch(() => showError('Failed to create room. Try again.'));
 }
-
 function joinRoom() {
     const roomId = document.getElementById('join-room').value.trim();
     if (roomId && roomId.length === 36) { // UUID length
@@ -160,12 +145,11 @@ function joinRoom() {
         showError('Invalid Room ID. Must be 36 characters.');
     }
 }
-
 function goBack() {
     currentRoom = null;
     window.history.replaceState(null, '', '/');
     showScreen(landing);
-    socket.disconnect();
+    socket.emit('leave'); // Fixed: Emit leave for server-side cleanup instead of disconnect
     messagesContainer.innerHTML = '';
     partnerStatus.textContent = 'Connecting...';
     messageInput.value = '';
@@ -174,12 +158,13 @@ function goBack() {
         typingMessageElement = null;
     }
 }
-
 function requestNext() {
+    showTypingIndicator(false); // Fixed: Clear typing indicator
+    messagesContainer.innerHTML = ''; // Fixed: Clear messages for fresh chat
+    partnerStatus.textContent = 'Finding next partner...'; // Fixed: Update status
     socket.emit('next');
     showWaiting(true, 'Finding next partner...');
 }
-
 function sendMessage() {
     const content = messageInput.value.trim();
     if (!content) return;
@@ -193,7 +178,6 @@ function sendMessage() {
     sendBtn.disabled = true;
     setTimeout(() => { sendBtn.disabled = false; }, 500);
 }
-
 // Socket Events
 socket.on('connect', () => {
     console.log('Connected to server');
@@ -202,57 +186,49 @@ socket.on('connect', () => {
         showScreen(waitingOverlay);
     }
 });
-
 socket.on('roomFull', (data) => {
     showWaiting(false);
     showError(data.message);
     setTimeout(goBack, 2000);
 });
-
 socket.on('waiting', () => {
     showScreen(chat);
     showWaiting(true, 'Waiting for partner...');
     partnerStatus.textContent = 'Waiting for partner...';
 });
-
 socket.on('paired', () => {
     showWaiting(false);
     showScreen(chat);
     partnerStatus.textContent = currentRoom ? 'Private Chat' : 'Random Chat';
 });
-
 socket.on('partnerLeft', () => {
     partnerStatus.textContent = 'Partner left';
     showWaiting(true, 'Partner disconnected. Finding new one...');
-    nextBtn.style.display = currentRoom ? 'none' : 'block';
     showTypingIndicator(false); // Hide typing if partner left
+    if (!currentRoom) {
+        socket.emit('joinRandom'); // Fixed: Re-join random queue for next partner
+    }
 });
-
 socket.on('message', (msg) => {
     addMessage({ ...msg, isSent: false });
     showTypingIndicator(false); // Hide typing on new message
 });
-
 socket.on('delivered', (id) => {
     updateMessageStatus(id, 'delivered');
 });
-
 socket.on('seen', (id) => {
     updateMessageStatus(id, 'seen');
     // Optional: Mark as read on receive for simplicity (WhatsApp-like)
     socket.emit('seen', { messageId: id });
 });
-
 socket.on('typing', (typing) => {
     showTypingIndicator(typing);
     partnerStatus.textContent = typing ? '' : (currentRoom ? 'Private Chat' : 'Random Chat');
 });
-
 socket.on('messageBlocked', (data) => {
     messageStatus.textContent = data.reason;
     setTimeout(() => { messageStatus.textContent = ''; }, 3000);
 });
-
 // Copy Link
 function copyRoomLink() {
     roomLinkInput.select();
@@ -260,17 +236,14 @@ function copyRoomLink() {
     copyLinkBtn.textContent = 'Copied!';
     setTimeout(() => { copyLinkBtn.textContent = 'Copy Link'; }, 2000);
 }
-
 // Auto-scroll and initial setup
 messagesContainer.addEventListener('scroll', () => {
     // Infinite scroll or other features if needed, but keep simple
 });
-
 window.addEventListener('load', () => {
     if (currentRoom) joinRoom(); // Auto-join if URL has room
     else showScreen(landing);
 });
-
 // Handle resize for responsiveness
 window.addEventListener('resize', () => {
     scrollToBottom();

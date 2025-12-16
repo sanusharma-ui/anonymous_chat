@@ -153,7 +153,6 @@ io.on("connection", (socket) => {
     socket.on("next", () => {
       console.log(`🔁 ${socket.id} requested next`);
       unpair(socket);
-      pairUser(socket);
     });
 
     // Typing indicator
@@ -178,38 +177,49 @@ io.on("connection", (socket) => {
   }
 });
 
-function pairUser(socket) {
-  // Find a partner from queue (check connected and not self)
-  for (let partner of waitingQueue) {
-    if (partner.connected && partner !== socket && !partner.partner) {
-      waitingQueue.delete(partner);
-      socket.partner = partner;
-      partner.partner = socket;
+function tryPair() {
+  while (waitingQueue.size >= 2) {
+    const [u1, u2] = [...waitingQueue].filter(
+      s => s.connected && !s.partner
+    ).slice(0, 2);
 
-      console.log(`🔗 Paired ${socket.id} with ${partner.id}`);
-      socket.emit("paired");
-      if (partner.connected) {
-        partner.emit("paired");
-      }
-      return;
-    }
+    if (!u1 || !u2) break;
+
+    waitingQueue.delete(u1);
+    waitingQueue.delete(u2);
+
+    u1.partner = u2;
+    u2.partner = u1;
+
+    console.log(`🔗 Paired ${u1.id} with ${u2.id}`);
+    u1.emit("paired");
+    u2.emit("paired");
   }
-  // No partner found, add to queue
+}
+
+function pairUser(socket) {
   waitingQueue.add(socket);
   socket.emit("waiting");
+  tryPair();
 }
 
 function unpair(socket) {
   if (socket.partner) {
     const partner = socket.partner;
+
     if (partner.connected) {
       partner.emit("partnerLeft");
       partner.partner = null;
-      waitingQueue.add(partner); // Add back to queue
+      waitingQueue.add(partner);
     }
+
     socket.partner = null;
   }
+
   waitingQueue.delete(socket);
+
+  // 🔥 THIS IS THE MISSING LINE
+  tryPair();
 }
 
 // Ngrok Integration (Easy to Remove: Just comment out or unset ENABLE_NGROK)
