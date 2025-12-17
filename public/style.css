@@ -156,6 +156,9 @@ body {
 
 /* Chat Screen */
 #chat {
+    display: flex;
+    flex-direction: column;
+    height: 100svh; /* 🔥 KEY: safe viewport for tablets/mobile */
     position: relative;
 }
 
@@ -202,6 +205,7 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--accent-primary) var(--bg-tertiary);
     min-height: 0;
+    padding-bottom: 90px; /* input box space */
 }
 
 .messages-container::-webkit-scrollbar {
@@ -316,10 +320,12 @@ body {
 .message-status.seen { color: var(--success); }
 
 .message-input-container {
-    padding: 1rem 2rem;
+    position: sticky;
+    bottom: 0;
+    padding: 0.75rem 1rem;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
-    flex-shrink: 0;
+    z-index: 20;
 }
 
 .input-wrapper {
@@ -521,4 +527,10 @@ body {
     .modal-content { padding: 1.5rem; width: 95%; }
     #room-link { padding: 0.625rem; font-size: 0.85rem; }
     .modal-content .btn-primary, .modal-content .btn-secondary { min-width: 100px; padding: 0.75rem 1rem; font-size: 0.9rem; }
+}
+
+@media (max-width: 1024px) {
+    body {
+        height: 100svh;
+    }
 }
