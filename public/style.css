@@ -195,6 +195,11 @@ body {
     background: var(--bg-tertiary);
 }
 
+.next-icon {
+    position: relative;
+    z-index: 200; /* overlay (100) se zyada */
+}
+
 .messages-container {
     flex: 1;
     overflow-y: auto;

@@ -25,6 +25,8 @@ const closeModalBtn = document.getElementById('close-modal');
 const errorModal = document.getElementById('error-modal');
 const errorText = document.getElementById('error-text');
 const okBtn = document.getElementById('ok-btn');
+nextBtn.style.display = 'block';
+
 
 // Event Listeners
 document.getElementById('random-chat').addEventListener('click', () => enterRandomChat());
