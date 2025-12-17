@@ -1,9 +1,12 @@
-const socket = io({ transports: ['websocket'], query: { room: new URLSearchParams(window.location.search).get('room') || '' } });
+// public/script.js
+const socket = io({ transports: ['websocket'] });
+
 let currentRoom = new URLSearchParams(window.location.search).get('room') || null;
 let messageIdCounter = 0;
 let isTyping = false;
 let typingTimer;
 let typingMessageElement = null;
+
 // DOM Elements
 const landing = document.getElementById('landing');
 const chat = document.getElementById('chat');
@@ -22,6 +25,7 @@ const closeModalBtn = document.getElementById('close-modal');
 const errorModal = document.getElementById('error-modal');
 const errorText = document.getElementById('error-text');
 const okBtn = document.getElementById('ok-btn');
+
 // Event Listeners
 document.getElementById('random-chat').addEventListener('click', () => enterRandomChat());
 document.getElementById('create-room').addEventListener('click', createRoom);
@@ -36,11 +40,12 @@ messageInput.addEventListener('keydown', () => clearTimeout(typingTimer));
 copyLinkBtn.addEventListener('click', copyRoomLink);
 closeModalBtn.addEventListener('click', () => { roomModal.style.display = 'none'; });
 okBtn.addEventListener('click', () => { errorModal.style.display = 'none'; });
+
 // Utility Functions
 function showScreen(screen) {
     [...document.querySelectorAll('.screen, .overlay')].forEach(el => el.classList.remove('active'));
     if (screen) screen.classList.add('active');
-    if (screen === chat) nextBtn.style.display = currentRoom ? 'none' : 'block'; // Hide next for private rooms
+    if (screen === chat) nextBtn.style.display = currentRoom ? 'none' : 'block';
 }
 function showWaiting(show = true, text = 'Finding a chat partner...') {
     waitingOverlay.classList.toggle('active', show);
@@ -56,7 +61,7 @@ function formatTime(date) {
 function addMessage({ id, content, isSent, timestamp = Date.now(), status = 'sent' }) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
-    messageDiv.dataset.id = id; // Fixed: Add data-id attribute for status updates
+    messageDiv.dataset.id = id;
     messageDiv.innerHTML = `
         <div class="message-bubble">${escapeHtml(content)}</div>
         <span class="message-time">${formatTime(timestamp)}</span>
@@ -83,7 +88,7 @@ function updateMessageStatus(id, status) {
 }
 function showTypingIndicator(show) {
     if (show) {
-        if (typingMessageElement) return; // Already showing
+        if (typingMessageElement) return;
         typingMessageElement = document.createElement('div');
         typingMessageElement.className = 'message received typing-message';
         typingMessageElement.innerHTML = `
@@ -103,10 +108,7 @@ function showTypingIndicator(show) {
     }
 }
 function scrollToBottom(behavior = 'smooth') {
-    messagesContainer.scrollTo({
-        top: messagesContainer.scrollHeight,
-        behavior: behavior
-    });
+    messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior });
 }
 function handleTyping() {
     const typing = messageInput.value.trim().length > 0;
@@ -120,11 +122,12 @@ function handleTyping() {
         socket.emit('typing', false);
     }, 1000);
 }
+
 // Chat Functions
 function enterRandomChat() {
     currentRoom = null;
     showScreen(waitingOverlay);
-    socket.emit('joinRandom'); // Trigger connection in public mode
+    socket.emit('joinRandom');
 }
 function createRoom() {
     fetch('/create-room')
@@ -132,17 +135,20 @@ function createRoom() {
         .then(data => {
             roomLinkInput.value = data.link;
             roomModal.style.display = 'flex';
-            currentRoom = new URLSearchParams(data.link.split('?')[1]).get('room');
-            // Auto-join the created room and wait for partner
+            const rid = new URLSearchParams(data.link.split('?')[1]).get('room');
+            currentRoom = rid;
+            // Auto-join the created room
             socket.emit('joinRoom', currentRoom);
             showScreen(waitingOverlay);
             document.getElementById('waiting-text').textContent = 'Room created! Waiting for partner...';
+            // Update URL
+            window.history.replaceState(null, '', `/?room=${currentRoom}`);
         })
         .catch(() => showError('Failed to create room. Try again.'));
 }
 function joinRoom() {
     const roomId = document.getElementById('join-room').value.trim();
-    if (roomId && roomId.length === 36) { // UUID length
+    if (roomId && roomId.length === 36) {
         currentRoom = roomId;
         window.history.replaceState(null, '', `/?room=${roomId}`);
         socket.emit('joinRoom', roomId);
@@ -156,19 +162,16 @@ function goBack() {
     currentRoom = null;
     window.history.replaceState(null, '', '/');
     showScreen(landing);
-    socket.emit('leave'); // Fixed: Emit leave for server-side cleanup instead of disconnect
+    socket.emit('leave'); // server will handle cleanup
     messagesContainer.innerHTML = '';
     partnerStatus.textContent = 'Connecting...';
     messageInput.value = '';
-    if (typingMessageElement) {
-        typingMessageElement.remove();
-        typingMessageElement = null;
-    }
+    showTypingIndicator(false);
 }
 function requestNext() {
-    showTypingIndicator(false); // Fixed: Clear typing indicator
-    messagesContainer.innerHTML = ''; // Fixed: Clear messages for fresh chat
-    partnerStatus.textContent = 'Finding next partner...'; // Fixed: Update status
+    showTypingIndicator(false);
+    messagesContainer.innerHTML = '';
+    partnerStatus.textContent = 'Finding next partner...';
     socket.emit('next');
     showWaiting(true, 'Finding next partner...');
 }
@@ -180,15 +183,23 @@ function sendMessage() {
     socket.emit('message', message);
     addMessage({ ...message, isSent: true, status: 'sent' });
     messageInput.value = '';
-    handleTyping(); // Stop typing
-    messageStatus.textContent = ''; // Clear any blocked status
+    handleTyping();
+    messageStatus.textContent = '';
     sendBtn.disabled = true;
-    setTimeout(() => { sendBtn.disabled = false; }, 500);
+    setTimeout(() => { sendBtn.disabled = false; }, 400);
 }
+
 // Socket Events
 socket.on('connect', () => {
     console.log('Connected to server');
-    // Removed auto-join from here; handled in load or button clicks
+    // If URL had room param on load, join it now
+    if (currentRoom) {
+        socket.emit('joinRoom', currentRoom);
+        showScreen(waitingOverlay);
+        document.getElementById('waiting-text').textContent = 'Joining room...';
+    } else {
+        showScreen(landing);
+    }
 });
 socket.on('roomFull', (data) => {
     showWaiting(false);
@@ -209,23 +220,20 @@ socket.on('paired', () => {
 });
 socket.on('partnerLeft', () => {
     partnerStatus.textContent = 'Partner left';
-    showWaiting(true, 'Partner disconnected. Finding new one...');
-    showTypingIndicator(false); // Hide typing if partner left
-    if (!currentRoom) {
-        socket.emit('joinRandom'); // Fixed: Re-join random queue for next partner
-    }
+    showWaiting(true, 'Partner disconnected. You can click Next to find another.');
+    showTypingIndicator(false);
+    // Let client decide: do not auto-join; show landing controls
     scrollToBottom();
 });
 socket.on('message', (msg) => {
     addMessage({ ...msg, isSent: false });
-    showTypingIndicator(false); // Hide typing on new message
+    showTypingIndicator(false);
 });
 socket.on('delivered', (id) => {
     updateMessageStatus(id, 'delivered');
 });
 socket.on('seen', (id) => {
     updateMessageStatus(id, 'seen');
-    // Optional: Mark as read on receive for simplicity (WhatsApp-like)
     socket.emit('seen', { messageId: id });
 });
 socket.on('typing', (typing) => {
@@ -236,6 +244,10 @@ socket.on('messageBlocked', (data) => {
     messageStatus.textContent = data.reason;
     setTimeout(() => { messageStatus.textContent = ''; }, 3000);
 });
+socket.on('error', (data) => {
+    if (data && data.message) showError(data.message);
+});
+
 // Copy Link
 function copyRoomLink() {
     roomLinkInput.select();
@@ -243,25 +255,8 @@ function copyRoomLink() {
     copyLinkBtn.textContent = 'Copied!';
     setTimeout(() => { copyLinkBtn.textContent = 'Copy Link'; }, 2000);
 }
-// Auto-scroll and initial setup
-messagesContainer.addEventListener('scroll', () => {
-    // Infinite scroll or other features if needed, but keep simple
-});
-window.addEventListener('load', () => {
-    if (currentRoom) {
-        // Auto-join if URL has room param
-        socket.emit('joinRoom', currentRoom);
-        showScreen(waitingOverlay);
-        document.getElementById('waiting-text').textContent = 'Joining room...';
-    } else {
-        showScreen(landing);
-    }
-});
-// Handle resize for responsiveness
-window.addEventListener('resize', () => {
-    scrollToBottom('auto');
-});
-// Keyboard handling for mobile
-messageInput.addEventListener('focus', () => {
-    setTimeout(scrollToBottom, 300);
-});
+
+// Setup: resize / scroll / mobile
+messagesContainer.addEventListener('scroll', () => {});
+window.addEventListener('resize', () => { scrollToBottom('auto'); });
+messageInput.addEventListener('focus', () => { setTimeout(scrollToBottom, 300); });
