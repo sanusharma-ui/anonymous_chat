@@ -83,24 +83,30 @@ function pairUser(socket) {
   tryPair();
 }
 
-function unpair(socket) {
-  // Remove socket from waitingQueue if present
+function unpair(socket, reason = "partnerLeft") {
   waitingQueue.delete(socket);
 
-  // If socket had a partner, notify partner and clear
   if (socket.partner) {
     const partner = socket.partner;
-    try {
-      if (partner.connected) {
-        partner.emit("partnerLeft");
-        partner.partner = null;
-        // Do NOT auto requeue partner: let client decide (or they can click Next)
-        // If you want automatic requeue for 'next' flow, client should emit 'next'
-      }
-    } catch (e) { /* ignore */ }
+
+    // break relation
     socket.partner = null;
+    partner.partner = null;
+
+    if (partner.connected) {
+      partner.emit("partnerLeft");
+
+      // 🔥 AUTO REQUEUE ONLY IF PARTNER LEFT UNEXPECTEDLY
+      if (
+        reason === "partnerLeft" &&
+        !partner.isPrivate &&
+        !waitingQueue.has(partner)
+      ) {
+        waitingQueue.add(partner);
+      }
+    }
   }
-  // After removing someone, try pair others waiting
+
   tryPair();
 }
 
@@ -131,8 +137,7 @@ io.on("connection", (socket) => {
 
   // PUBLIC: request next partner (user-initiated)
   socket.on("next", () => {
-    // unpair current and requeue this socket
-    unpair(socket);
+    unpair(socket, "manualNext");
     pairUser(socket);
   });
 
@@ -260,7 +265,7 @@ io.on("connection", (socket) => {
       socket.partner = null;
     } else {
       // public: unpair this socket
-      unpair(socket);
+      unpair(socket, "manualLeave");
     }
   });
 
@@ -277,7 +282,9 @@ io.on("connection", (socket) => {
       console.log(`🏠 ${socket.id} disconnecting from private room ${roomId} (remaining=${updatedCount})`);
     } else {
       // public: unpair and cleanup
-      unpair(socket);
+      if (!socket.isPrivate) {
+        unpair(socket, "partnerLeft");
+      }
     }
   });
 
