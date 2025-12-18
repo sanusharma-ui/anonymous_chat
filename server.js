@@ -1,4 +1,7 @@
-// server.js
+// server.js - No changes needed for this feature (client-side only)
+// The server already emits 'partnerLeft' correctly on disconnect.
+// If you need server-side tweaks, let me know.
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");

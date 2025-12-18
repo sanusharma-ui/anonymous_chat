@@ -1,6 +1,7 @@
 // script.js - full client-side logic for ShadowChat
 // Follow-up: kept all features from original, fixed overlay/Next visibility issues,
 // improved robustness for mobile/tablet, and retained safety/status features.
+// Added flashing messages on partner disconnect: first "Disconnected", then "To connect with someone else, click ↻".
 
 // Socket.io client
 const socket = io({ transports: ['websocket'] });
@@ -123,6 +124,16 @@ function showTypingIndicator(show) {
       typingMessageElement = null;
     }
   }
+}
+
+// New: Flash a message in partnerStatus with fade-in/out animation
+// Assumes CSS has .flash { animation: flash 1s ease-in-out; } @keyframes flash { 0%,100%{opacity:1} 50%{opacity:0.5} }
+function flashStatusMessage(message, duration = 2000) {
+  partnerStatus.textContent = message;
+  partnerStatus.classList.add('flash');
+  setTimeout(() => {
+    partnerStatus.classList.remove('flash');
+  }, duration);
 }
 
 // --- Input / Typing handling ---
@@ -290,12 +301,22 @@ socket.on('paired', () => {
 });
 
 socket.on('partnerLeft', () => {
+  // Updated: Flash "Disconnected" then "To connect with someone else, click ↻"
   // IMPORTANT FIX: hide overlay and show chat header + Next button
-  partnerStatus.textContent = 'Partner left';
   showWaiting(false);           // hide overlay - critical
   showTypingIndicator(false);
   showScreen(chat);             // make sure chat screen is visible
   // preserve messages; user can click Next
+
+  // Flash sequence
+  flashStatusMessage('Disconnected', 1500);
+  setTimeout(() => {
+    flashStatusMessage('To connect with someone else, click ↻', 3000);
+    setTimeout(() => {
+      partnerStatus.textContent = 'Partner left'; // fallback to original
+    }, 3000);
+  }, 1500);
+
   scrollToBottom();
 });
 
