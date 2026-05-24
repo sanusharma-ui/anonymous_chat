@@ -1,78 +1,91 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShadowChat - Modern Anonymous Chat</title>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShadowChat</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Landing Screen -->
-    <div id="landing" class="screen active">
-        <div class="logo">
-            <h1>ShadowChat</h1>
-            <p>Anonymous chats, powered by. Clean, fun, and safe.</p>
-        </div>
-        <div class="options">
-            <button id="random-chat" class="btn-primary">Random Chat</button>
-            <button id="create-room" class="btn-secondary">Create Private Room</button>
-            <div class="or-divider">or</div>
-            <div class="input-group">
-                <input type="text" id="join-room" placeholder="Enter Room ID to Join" maxlength="36">
-                <button id="join-btn" class="btn-primary">Join</button>
-            </div>
-        </div>
+  <div id="landing" class="screen active">
+    <div class="logo">
+      <h1>ShadowChat</h1>
+      <p>Anonymous chats — clean, simple, and safe.</p>
     </div>
 
-    <!-- Chat Screen -->
-    <div id="chat" class="screen">
-        <header class="chat-header">
-            <div class="status">
-                <span id="partner-status">Connecting...</span>
-            </div>
-            <button id="back-btn" class="back-icon">←</button>
-            <button id="next-btn" class="next-icon" style="display: none;">↻</button>
-        </header>
-        <div id="messages" class="messages-container"></div>
-        <div class="message-input-container">
-            <div class="input-wrapper">
-                <input type="text" id="message-input" placeholder="Type a message..." maxlength="500">
-                <button id="send-btn" class="send-btn">→</button>
-            </div>
-            <div id="message-status" class="status-text"></div>
+    <div class="options">
+      <button id="random-chat" class="btn-primary">Random Chat</button>
+
+      <div class="card">
+        <div class="card-title">Private Room</div>
+        <button id="create-room" class="btn-secondary">Create Private Room</button>
+
+        <div class="or-divider"><span>or</span></div>
+
+        <div class="input-group">
+          <input type="text" id="join-room" placeholder="Paste Room ID or link to join" maxlength="200" />
+          <button id="join-btn" class="btn-primary">Join</button>
         </div>
+
+        <div class="hint">Tip: You can paste the full link like <code>/?room=...</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat" class="screen">
+    <header class="chat-header">
+      <button id="back-btn" class="icon-btn" aria-label="Back">←</button>
+
+      <div class="header-center">
+        <div id="chat-title" class="chat-title">ShadowChat</div>
+        <div id="partner-status" class="chat-subtitle">Connecting…</div>
+      </div>
+
+      <button id="next-btn" class="icon-btn" aria-label="Next">↻</button>
+    </header>
+
+    <div id="connection-banner" class="connection-banner" style="display:none;">
+      <div class="spinner small"></div>
+      <div id="connection-text" class="connection-text">Finding a chat partner…</div>
     </div>
 
-    <!-- Waiting Screen Overlay -->
-    <div id="waiting-overlay" class="overlay active">
-        <div class="waiting-content">
-            <div class="spinner"></div>
-            <p id="waiting-text">Finding a chat partner...</p>
-        </div>
+    <div id="messages" class="messages-container" aria-live="polite"></div>
+
+    <!-- Composer -->
+    <div class="composer">
+      <!-- Attach image -->
+      <button id="attach-btn" class="tool-btn" aria-label="Attach image" title="Attach image">📎</button>
+      <input id="image-input" type="file" accept="image/*" style="display:none;" />
+
+      <!-- Text -->
+      <textarea id="message-input" placeholder="Type a message… (Shift+Enter for new line)" maxlength="500" rows="1"></textarea>
+
+      <!-- Voice -->
+      <button id="voice-btn" class="tool-btn" aria-label="Record voice" title="Hold to record">🎙</button>
+
+      <!-- Send -->
+      <button id="send-btn" class="send-btn" aria-label="Send">→</button>
     </div>
 
-    <!-- Room Created Modal -->
-    <div id="room-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2>Room Created!</h2>
-            <p>Share this link with your friend:</p>
-            <input type="text" id="room-link" readonly>
-            <button id="copy-link" class="btn-primary">Copy Link</button>
-            <button id="close-modal" class="btn-secondary">Close</button>
-        </div>
-    </div>
+    <div id="message-status" class="status-text" aria-live="polite"></div>
+  </div>
 
-    <!-- Error Modal -->
-    <div id="error-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2>Oops!</h2>
-            <p id="error-text"></p>
-            <button id="ok-btn" class="btn-primary">OK</button>
-        </div>
+  <div id="room-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Room Created</h2>
+      <p>Share this link with your friend:</p>
+      <input type="text" id="room-link" readonly />
+      <div class="modal-actions">
+        <button id="copy-link" class="btn-primary">Copy</button>
+        <button id="close-modal" class="btn-secondary">Close</button>
+      </div>
     </div>
+  </div>
 
-    <script src="script.js"></script>
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="script.js"></script>
 </body>
 </html>

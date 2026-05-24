@@ -9,6 +9,8 @@ const { randomUUID } = require("crypto");
 require('dotenv').config();
 // const ngrok = require("@ngrok/ngrok"); // optional, keep commented if not using
 
+
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -102,9 +104,14 @@ function unpair(socket) {
 }
 
 // --- Routes ---
+
 app.get("/create-room", (req, res) => {
   const roomId = randomUUID();
   res.json({ link: `${req.protocol}://${req.get("host")}/?room=${roomId}` });
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
 });
 
 // --- Socket handlers ---
