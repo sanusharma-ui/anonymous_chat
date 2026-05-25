@@ -1,114 +1,182 @@
-# 🌑 ShadowChat
+# ShadowChat 🌑
+Anonymous, real-time 1:1 chat — **Random pairing** + **Private rooms** — built with **Node.js + Express + Socket.IO**.  
+No login. No profiles. No message storage.
 
-**ShadowChat** is an anonymous real-time random chat web application that connects two strangers instantly — no login, no profile, no history.  
-Just open, connect, and talk.
-
-Inspired by classic random-pairing platforms, ShadowChat focuses on **clean UX**, **privacy**, and **robust real-time behavior**, with modern safety and stability built in.
+## Table of Contents
+- [Demo](#demo)
+- [Key Features](#key-features)
+- [How It Works](#how-it-works)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Install & Run](#install--run)
+  - [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
+  - [Render](#render)
+  - [Keep-alive (Avoid Sleeping)](#keep-alive-avoid-sleeping)
+- [Security & Privacy Notes](#security--privacy-notes)
+- [Roadmap](#roadmap)
+- [License](#license)
 
 ---
 
-##  Features
+## Demo
+- Local: `http://localhost:3000`
+- Production (example): `https://shadowchat-4.onrender.com`
+
+> If you host on a free tier (e.g., Render Free), the first request after inactivity may be a cold start.
+
+---
+
+## Key Features
 
 ### 🎲 Random Anonymous Chat
-- Instantly get paired with a random user
-- One-to-one, real-time messaging
-- Click **↻ Next** anytime to switch partners
+- Join a queue and get paired 1:1 with a random user
+- Real-time messaging via Socket.IO
+- **↻ Next** to immediately switch to a new partner (random mode only)
 
 ### 🔗 Private Rooms
-- Create a private room with a unique invite link
-- Share the link and chat securely
-- Room auto-limits to 2 users only
+- Create a room and share an invite link
+- Rooms are limited to **2 users**
+- “Room full” handling built-in
 
-### 💬 Real-Time Chat Experience
-- Typing indicators
-- Message delivery & seen status
-- Smooth auto-scrolling (mobile friendly)
+### 💬 Real-Time Chat UX
+- Typing indicator
+- Delivery + seen acknowledgements
+- Mobile-friendly auto-scroll and resilient UI states
 
 ### 🛡️ Safety & Moderation
-- Built-in bad-word filtering (English + Hindi + Hinglish)
-- Clean chat enforcement with friendly warnings
-- No message storage on server
+- Bad-word filtering (English + Hindi + Hinglish)
+- Messages are blocked client-visible with a friendly reason
+- No server-side message persistence
 
-### ⚡ Stable & UX-Focused
-- Graceful handling of disconnects
-- Clear partner status updates
-- Mobile & tablet optimized
-- Network-safe pairing logic
-
----
-
-## 🧠 How It Works (High Level)
-
-1. User joins **Random Chat** or a **Private Room**
-2. Server places users in a waiting queue
-3. Two users get paired instantly
-4. Messages flow peer-to-peer via Socket.IO
-5. On disconnect, the other user is notified immediately
-
-No database.  
-No tracking.  
-No persistence.
+### ⚡ Stability / UX-First Behavior
+- Clean handling of disconnects (`partnerLeft`)
+- Clear connection/waiting states
+- Robust pairing logic and queue cleanup
 
 ---
 
-## 🛠️ Tech Stack
+## How It Works
 
-- **Frontend:** Vanilla JavaScript, HTML, CSS  
-- **Backend:** Node.js, Express  
-- **Realtime:** Socket.IO (WebSocket transport)  
-- **Utilities:** UUID, dotenv  
+1. User selects **Random Chat** or joins/creates a **Private Room**
+2. Server either:
+   - puts the socket in the random waiting queue, or
+   - joins the socket to a private room (max 2)
+3. When 2 users are available, the server emits `paired`
+4. Messages are relayed in real-time (no database)
+5. On disconnect / leave, the partner gets `partnerLeft`
+
+**No database. No accounts. No history.**
 
 ---
 
-## 📂 Project Structure
+## Tech Stack
+- **Backend:** Node.js, Express
+- **Realtime:** Socket.IO (WebSocket transport)
+- **Frontend:** Vanilla HTML/CSS/JS
+- **Utilities:** `crypto.randomUUID`, `dotenv`
 
+---
+
+## Project Structure
+```
 shadowchat/
-│
 ├── public/
-│ ├── index.html
-│ ├── style.css
-│ └── script.js
-│
+│   ├── index.html
+│   ├── style.css
+│   └── script.js
 ├── server.js
 ├── package.json
 └── README.md
-
+```
 
 ---
 
-## ▶️ Getting Started
+## Getting Started
 
-### 1️⃣ Clone the repository
+### Prerequisites
+- Node.js 18+ recommended
+- npm (comes with Node)
 
-2️⃣ Install dependencies
+### Install & Run
+```bash
+# 1) Install dependencies
 npm install
-3️⃣ Run the server
-node server.js
-4️⃣ Open in browser
-http://localhost:3000
-🌐 Environment Variables (Optional)
-Create a .env file if needed:
 
+# 2) Start the server
+node server.js
+```
+
+Open:
+- `http://localhost:3000`
+
+---
+
+## Environment Variables
+Create a `.env` file (optional):
+
+```bash
 PORT=3000
 ENABLE_NGROK=false
-🧪 Status
-✅ Fully functional MVP
+# NGROK_AUTHTOKEN=...
+```
 
-✅ Production-ready logic
+- `PORT`: server port (default `3000`)
+- `ENABLE_NGROK`: set `true` only if you wire ngrok in
 
-🚧 Future improvements possible (see below)
+---
 
-🔮 Possible Enhancements
-Reconnect grace timer
+## Deployment
 
-Rate limiting & spam control
+### Render
+Typical setup:
+- Build Command: `npm install`
+- Start Command: `node server.js`
 
-AI-based moderation
+Make sure WebSocket is allowed (Render supports it for web services).
 
-Message encryption layer
+### Keep-alive (Avoid Sleeping)
+If your Render instance sleeps (free tier), create a lightweight endpoint:
 
-WebRTC voice/video chat
+```js
+app.get("/health", (req, res) => res.status(200).send("ok"));
+```
 
-🧑‍💻 Author
-Built with ❤️ and overthinking by Sanu Sharma
-(Anonymous chat, but not anonymous effort 😉)
+Then configure an external uptime/cron service (e.g., cron-job.org) to ping:
+
+- `https://<your-app>.onrender.com/health`
+- Every **5 minutes**
+- Method: **GET**
+
+---
+
+## Security & Privacy Notes
+- ShadowChat is designed to be anonymous, but **anonymity is not a security boundary**.
+- Messages are filtered for bad words, but moderation is not perfect.
+- No chat history is stored by default; however:
+  - hosting providers may log requests
+  - Socket.IO traffic is still network traffic (use HTTPS/WSS in production)
+
+If you plan to run this publicly, consider:
+- Rate limiting and spam control
+- Abuse reporting / blocking
+- Stricter content moderation
+- Uploading media to storage (S3/Cloudinary) instead of sending base64
+
+---
+
+## Roadmap
+Ideas for future improvements:
+- Reconnect grace timer (short window to rejoin the same partner)
+- Rate limiting + anti-spam
+- Better moderation pipeline (regex + ML / external service)
+- Optional message encryption layer
+- Proper message types (`text`, `image`, `audio`) and media URLs (instead of base64)
+
+---
+
+## License
+Add your license of choice (MIT is common).  
+If you don’t have one yet, create a `LICENSE` file and update this section.
