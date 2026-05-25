@@ -1,7 +1,3 @@
-// server.js - No changes needed for this feature (client-side only)
-// The server already emits 'partnerLeft' correctly on disconnect.
-// If you need server-side tweaks, let me know.
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -33,12 +29,121 @@ const hindiBadWords = [
   'kutiya', 'kutta', 'suar', 'ullu', 'bc', 'mc', 'bsdk', 'pkmkb', 'teri maa ki chut'
 ];
 
+/**
+ * Smart bad words detector
+ * - Ignores base64/binary data (images, files)
+ * - Only checks actual text content
+ * - Uses word boundaries for precision
+ * - Handles typos/obfuscation (spaces, numbers, symbols)
+ */
 function hasBadWords(content) {
   if (!content || typeof content !== 'string') return false;
-  const lowerMsg = content.toLowerCase();
-  return englishBadWords.some(w => lowerMsg.includes(w)) ||
-         hindiBadWords.some(w => lowerMsg.includes(w));
+
+  // Check if content looks like base64 or binary data (for images, files, etc.)
+  // Base64 has specific patterns and high entropy
+  if (isBase64OrBinary(content)) {
+    return false; // Skip bad word check for binary data
+  }
+
+  // Extract only actual text (remove URLs, markdown, special formatting)
+  const cleanText = extractTextContent(content);
+  
+  if (!cleanText || cleanText.length < 2) return false; // Too short to be meaningful
+
+  const lowerMsg = cleanText.toLowerCase();
+
+  // Check English bad words with word boundaries
+  for (const word of englishBadWords) {
+    if (containsWord(lowerMsg, word)) {
+      return true;
+    }
+  }
+
+  // Check Hindi bad words with word boundaries
+  for (const word of hindiBadWords) {
+    if (containsWord(lowerMsg, word)) {
+      return true;
+    }
+  }
+
+  return false;
 }
+
+/**
+ * Detects if content is likely base64/binary (images, files, etc.)
+ */
+function isBase64OrBinary(str) {
+  if (!str || str.length < 50) return false;
+
+  // Common prefixes for data URIs (images, etc.)
+  if (str.startsWith('data:') || str.startsWith('blob:')) {
+    return true;
+  }
+
+  // Check for base64 patterns
+  // Base64 only contains A-Z, a-z, 0-9, +, /, = and whitespace
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  const hasOnlyBase64Chars = base64Regex.test(str.replace(/\s/g, ''));
+
+  if (hasOnlyBase64Chars && str.length > 100) {
+    // If 80%+ of content is alphanumeric (and looks like base64), it's likely binary
+    const alphanumericRatio = (str.match(/[A-Za-z0-9+/]/g) || []).length / str.length;
+    return alphanumericRatio > 0.8;
+  }
+
+  return false;
+}
+
+/**
+ * Extracts readable text from content
+ * Removes URLs, JSON-like data, markdown formatting
+ */
+function extractTextContent(str) {
+  let text = str;
+
+  // Remove URLs
+  text = text.replace(/https?:\/\/[^\s]+/g, ' ');
+  text = text.replace(/www\.[^\s]+/g, ' ');
+
+  // Remove JSON/object-like patterns (for metadata)
+  text = text.replace(/\{[^}]*\}/g, ' ');
+  text = text.replace(/\[[^\]]*\]/g, ' ');
+
+  // Remove markdown/formatting
+  text = text.replace(/[*_`~#]/g, ' ');
+
+  // Remove excessive symbols and numbers
+  text = text.replace(/[0-9]{10,}/g, ' '); // Long number sequences (timestamps, etc.)
+
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+
+  return text;
+}
+
+/**
+ * Check if word exists with proper boundaries
+ * Handles common obfuscation: f*ck, f-ck, f_ck, f@ck, fck (with missing vowels), f u c k
+ */
+function containsWord(text, badWord) {
+  // Create a pattern that matches the bad word with common obfuscation
+  // E.g., "fuck" matches: f*ck, f-ck, f_ck, f@ck, f u c k, fck, etc.
+
+  // Escape special regex characters
+  const escaped = badWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Build pattern with flexible character matching
+  // This allows for spaces, symbols, or missing characters between letters
+  const pattern = escaped
+    .split('')
+    .join('[^a-z0-9]*?'); // Allow any non-word characters between letters
+
+  // Word boundary check: must not be preceded or followed by word characters
+  const regex = new RegExp(`(?:^|[^a-z0-9])${pattern}(?:[^a-z0-9]|$)`, 'i');
+
+  return regex.test(text);
+}
+
 // -----------------------------------------------------------
 
 // Pairing state
